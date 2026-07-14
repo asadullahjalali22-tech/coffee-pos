@@ -1,24 +1,19 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or "Coffee POS" }}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{ title or "Coffee POS" }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='131') }}">
 </head>
 <body>
 <header class="topbar">
-    <h1>Coffee POS</h1>
-    <nav>
-        <a href="/">Home</a>
-        <a href="/cashier">Cashier</a>
-        <a href="/kitchen">Kitchen</a>
-        <a href="/admin/products">Products</a>
-        <a href="/admin/tables">Tables</a>
-    </nav>
+<h1>Coffee POS</h1>
+<nav>
+<a href="/">Home</a><a href="/cashier">Cashier</a><a href="/kitchen">Kitchen</a>
+<a href="/admin/products">Products</a><a href="/admin/tables">Tables</a>
+</nav>
 </header>
-<main class="container">
-    {% block content %}{% endblock %}
-</main>
+<main class="container">{% block content %}{% endblock %}</main>
 </body>
 </html>

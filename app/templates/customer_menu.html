@@ -1,50 +1,67 @@
-{% extends "base.html" %}
+{% extends "customer_base.html" %}
 {% block content %}
-<section class="customer-header">
-    <div>
-        <p class="eyebrow">Customer ordering</p>
-        <h2>Table {{ table.table_number }}</h2>
-        <p>Select your products and send the order directly to the kitchen.</p>
-    </div>
+<section class="welcome-card">
+<div>
+<p class="kicker">ORDER FROM YOUR TABLE</p>
+<h1>Welcome to Coffee House</h1>
+<p>Choose your favourites. Your order goes directly to the kitchen.</p>
+</div>
+<div class="welcome-table">Table {{ table.table_number }}</div>
 </section>
 
-<div class="pos-layout customer-layout">
-    <section>
-        <div class="product-grid">
-        {% for product in products %}
-            <button
-                class="product-card"
-                data-id="{{ product.id }}"
-                data-name="{{ product.name }}"
-                data-price="{{ product.price }}"
-                onclick="addProduct(this)"
-            >
-                <strong>{{ product.name }}</strong>
-                <span>{{ product.category }}</span>
-                {% if product.description %}
-                <small>{{ product.description }}</small>
-                {% endif %}
-                <span>€{{ "%.2f"|format(product.price) }}</span>
-            </button>
-        {% endfor %}
-        </div>
-    </section>
+<nav class="category-nav">
+{% for category, items in products|groupby("category") %}
+<a href="#category-{{ loop.index }}">{{ category }}</a>
+{% endfor %}
+</nav>
 
-    <aside class="cart">
-        <h3>Your Order</h3>
-        <div id="cart-items"></div>
+<div class="order-layout">
+<section class="menu-column">
+{% for category, items in products|groupby("category") %}
+<section class="category-section" id="category-{{ loop.index }}">
+<div class="section-title"><div><p class="kicker">MENU</p><h2>{{ category }}</h2></div><span>{{ items|length }} items</span></div>
+<div class="product-grid-real">
+{% for product in items %}
+<article class="menu-card">
+<div class="menu-card-image"><span>{{ product.name[:1] }}</span></div>
+<div class="menu-card-content">
+<div>
+<h3>{{ product.name }}</h3>
+<p>{{ product.description or "Freshly prepared for you." }}</p>
+</div>
+<div class="menu-card-footer">
+<strong>€{{ "%.2f"|format(product.price) }}</strong>
+<button type="button" data-id="{{ product.id }}" data-name="{{ product.name }}" data-price="{{ product.price }}" onclick="addProduct(this)">Add</button>
+</div>
+</div>
+</article>
+{% endfor %}
+</div>
+</section>
+{% endfor %}
+</section>
 
-        <label for="comment">Special request</label>
-        <textarea id="comment" placeholder="No sugar, extra hot..."></textarea>
+<aside class="cart-panel">
+<div class="cart-head"><div><p class="kicker">YOUR ORDER</p><h2>Cart</h2></div><span id="cart-count">0</span></div>
+<div id="empty-cart" class="empty-state"><div>🛍️</div><strong>Your cart is empty</strong><p>Add something delicious from the menu.</p></div>
+<div id="cart-items"></div>
+<div id="cart-bottom" class="hidden">
+<label for="comment">Special request</label>
+<textarea id="comment" placeholder="No sugar, oat milk, extra hot..."></textarea>
+<div class="total-line"><span>Total</span><strong id="total">€0.00</strong></div>
+<button id="place-order" class="primary-button" onclick="submitOrder()">Send order to kitchen</button>
+</div>
+<p id="message" class="form-message"></p>
+</aside>
+</div>
 
-        <div class="total-row">
-            <strong>Total</strong>
-            <strong id="total">€0.00</strong>
-        </div>
-
-        <button class="button full" onclick="submitOrder()">Place Order</button>
-        <p id="message"></p>
-    </aside>
+<div id="success-modal" class="modal hidden">
+<div class="modal-card">
+<div class="success-check">✓</div>
+<h2>Order received</h2>
+<p id="success-message">Your order has been sent.</p>
+<button class="primary-button" onclick="closeModal()">Continue</button>
+</div>
 </div>
 
 <script>
@@ -52,91 +69,107 @@ const cart = {};
 const tableId = {{ table.id }};
 
 function addProduct(button) {
-    const id = Number(button.dataset.id);
-    const name = button.dataset.name;
-    const price = Number(button.dataset.price);
-
-    if (!cart[id]) {
-        cart[id] = { product_id: id, name, price, quantity: 0 };
-    }
-
-    cart[id].quantity += 1;
-    renderCart();
+  const id = Number(button.dataset.id);
+  if (!cart[id]) {
+    cart[id] = {
+      product_id: id,
+      name: button.dataset.name,
+      price: Number(button.dataset.price),
+      quantity: 0
+    };
+  }
+  cart[id].quantity += 1;
+  renderCart();
 }
 
-function changeQuantity(id, amount) {
-    cart[id].quantity += amount;
-
-    if (cart[id].quantity <= 0) {
-        delete cart[id];
-    }
-
-    renderCart();
+function changeQuantity(id, delta) {
+  if (!cart[id]) return;
+  cart[id].quantity += delta;
+  if (cart[id].quantity <= 0) delete cart[id];
+  renderCart();
 }
 
 function renderCart() {
-    const container = document.getElementById("cart-items");
-    container.innerHTML = "";
-    let total = 0;
+  const itemsBox = document.getElementById("cart-items");
+  itemsBox.innerHTML = "";
+  let count = 0;
+  let total = 0;
 
-    Object.values(cart).forEach(item => {
-        total += item.price * item.quantity;
+  Object.values(cart).forEach(item => {
+    count += item.quantity;
+    total += item.quantity * item.price;
 
-        const row = document.createElement("div");
-        row.className = "cart-row";
-        row.innerHTML = `
-            <div>
-                <strong>${item.name}</strong>
-                <small>€${item.price.toFixed(2)} each</small>
-            </div>
-            <div class="quantity">
-                <button onclick="changeQuantity(${item.product_id}, -1)">−</button>
-                <span>${item.quantity}</span>
-                <button onclick="changeQuantity(${item.product_id}, 1)">+</button>
-            </div>
-        `;
-        container.appendChild(row);
-    });
+    const row = document.createElement("div");
+    row.className = "cart-row-real";
+    row.innerHTML = `
+      <div class="cart-item-main">
+        <strong>${item.name}</strong>
+        <small>€${item.price.toFixed(2)} each</small>
+      </div>
+      <div class="qty-control">
+        <button onclick="changeQuantity(${item.product_id}, -1)">−</button>
+        <span>${item.quantity}</span>
+        <button onclick="changeQuantity(${item.product_id}, 1)">+</button>
+      </div>
+      <strong class="cart-line-price">€${(item.price * item.quantity).toFixed(2)}</strong>
+    `;
+    itemsBox.appendChild(row);
+  });
 
-    document.getElementById("total").textContent = `€${total.toFixed(2)}`;
+  document.getElementById("cart-count").textContent = count;
+  document.getElementById("total").textContent = `€${total.toFixed(2)}`;
+  document.getElementById("empty-cart").classList.toggle("hidden", count > 0);
+  document.getElementById("cart-bottom").classList.toggle("hidden", count === 0);
 }
 
 async function submitOrder() {
-    const items = Object.values(cart).map(item => ({
-        product_id: item.product_id,
-        quantity: item.quantity
-    }));
+  const items = Object.values(cart).map(item => ({
+    product_id: item.product_id,
+    quantity: item.quantity
+  }));
 
-    const message = document.getElementById("message");
+  const button = document.getElementById("place-order");
+  const message = document.getElementById("message");
 
-    if (items.length === 0) {
-        message.textContent = "Please select at least one product.";
-        return;
-    }
+  if (!items.length) {
+    message.textContent = "Please add at least one item.";
+    return;
+  }
 
+  button.disabled = true;
+  button.textContent = "Sending...";
+
+  try {
     const response = await fetch("/orders", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            table_id: tableId,
-            items,
-            comment: document.getElementById("comment").value
-        })
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        table_id: tableId,
+        items,
+        comment: document.getElementById("comment").value
+      })
     });
 
     const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not send order.");
 
-    if (!response.ok) {
-        message.textContent = result.error || "Could not create order.";
-        return;
-    }
-
-    message.textContent =
-        `Thank you! Order #${result.order_id} was sent to the kitchen.`;
+    document.getElementById("success-message").textContent =
+      `Order #${result.order_id} was sent to the kitchen. Total €${result.total.toFixed(2)}.`;
 
     Object.keys(cart).forEach(key => delete cart[key]);
     document.getElementById("comment").value = "";
     renderCart();
+    document.getElementById("success-modal").classList.remove("hidden");
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Send order to kitchen";
+  }
+}
+
+function closeModal() {
+  document.getElementById("success-modal").classList.add("hidden");
 }
 </script>
 {% endblock %}

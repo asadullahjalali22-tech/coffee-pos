@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#2f1f18">
+<title>{{ title or "Coffee House Menu" }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='customer.css', v='131') }}">
+</head>
+<body>
+<header class="customer-header">
+<div class="brand"><span class="brand-icon">☕</span><div><strong>Coffee House</strong><small>Fresh coffee, simple ordering</small></div></div>
+<div class="header-table">Table {{ table.table_number if table else '' }}</div>
+</header>
+<main class="customer-shell">{% block content %}{% endblock %}</main>
+</body>
+</html>

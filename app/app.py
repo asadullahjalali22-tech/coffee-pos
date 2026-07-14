@@ -48,19 +48,176 @@ def health():
 def cashier():
     connection = get_db()
     cursor = connection.cursor(dictionary=True)
+
+    # Every unpaid, non-cancelled order remains open until the cashier receives payment.
     cursor.execute(
         """
-        SELECT p.id, p.name, p.description, p.price, c.name AS category
-        FROM products p
-        JOIN categories c ON c.id = p.category_id
-        WHERE p.available = TRUE
-        ORDER BY c.name, p.name
+        SELECT
+            o.id,
+            o.table_id,
+            o.order_type,
+            o.status,
+            o.payment_status,
+            o.customer_comment,
+            o.total,
+            o.created_at,
+            t.table_number
+        FROM orders o
+        LEFT JOIN cafe_tables t ON t.id = o.table_id
+        WHERE o.payment_status = 'unpaid'
+          AND o.status <> 'cancelled'
+        ORDER BY
+            CASE WHEN o.table_id IS NULL THEN 1 ELSE 0 END,
+            t.table_number,
+            o.created_at ASC
         """
     )
-    products = cursor.fetchall()
+    unpaid_orders = cursor.fetchall()
+
+    for order in unpaid_orders:
+        cursor.execute(
+            """
+            SELECT
+                p.name,
+                oi.quantity,
+                oi.unit_price,
+                oi.line_total
+            FROM order_items oi
+            JOIN products p ON p.id = oi.product_id
+            WHERE oi.order_id = %s
+            ORDER BY oi.id
+            """,
+            (order["id"],),
+        )
+        order["items"] = cursor.fetchall()
+
+    table_groups_by_id = {}
+    counter_orders = []
+
+    for order in unpaid_orders:
+        if order["table_id"] is None:
+            counter_orders.append(order)
+            continue
+
+        table_id = order["table_id"]
+        if table_id not in table_groups_by_id:
+            table_groups_by_id[table_id] = {
+                "table_id": table_id,
+                "table_number": order["table_number"],
+                "orders": [],
+                "total": Decimal("0.00"),
+            }
+
+        table_groups_by_id[table_id]["orders"].append(order)
+        table_groups_by_id[table_id]["total"] += Decimal(order["total"])
+
+    table_groups = list(table_groups_by_id.values())
+
+    cursor.execute(
+        """
+        SELECT
+            o.id,
+            o.table_id,
+            o.order_type,
+            o.payment_method,
+            o.total,
+            o.created_at,
+            t.table_number
+        FROM orders o
+        LEFT JOIN cafe_tables t ON t.id = o.table_id
+        WHERE o.payment_status = 'paid'
+        ORDER BY o.id DESC
+        LIMIT 30
+        """
+    )
+    paid_history = cursor.fetchall()
+
+    open_table_total = sum(
+        (group["total"] for group in table_groups),
+        Decimal("0.00"),
+    )
+    counter_total = sum(
+        (Decimal(order["total"]) for order in counter_orders),
+        Decimal("0.00"),
+    )
+
     cursor.close()
     connection.close()
-    return render_template("cashier.html", products=products)
+
+    return render_template(
+        "cashier.html",
+        table_groups=table_groups,
+        counter_orders=counter_orders,
+        paid_history=paid_history,
+        open_table_total=open_table_total,
+        counter_total=counter_total,
+    )
+
+
+def validate_payment_method(payment_method):
+    if payment_method not in {"cash", "card"}:
+        raise ValueError("Invalid payment method.")
+
+
+@app.post("/cashier/tables/<int:table_id>/pay")
+def pay_table_orders(table_id):
+    payment_method = request.form.get("payment_method", "").strip().lower()
+
+    try:
+        validate_payment_method(payment_method)
+    except ValueError as exc:
+        return str(exc), 400
+
+    connection = get_db()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        UPDATE orders
+        SET payment_status = 'paid',
+            payment_method = %s
+        WHERE table_id = %s
+          AND payment_status = 'unpaid'
+          AND status <> 'cancelled'
+        """,
+        (payment_method, table_id),
+    )
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return redirect(url_for("cashier"))
+
+
+@app.post("/cashier/orders/<int:order_id>/pay")
+def pay_counter_order(order_id):
+    payment_method = request.form.get("payment_method", "").strip().lower()
+
+    try:
+        validate_payment_method(payment_method)
+    except ValueError as exc:
+        return str(exc), 400
+
+    connection = get_db()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        UPDATE orders
+        SET payment_status = 'paid',
+            payment_method = %s
+        WHERE id = %s
+          AND table_id IS NULL
+          AND payment_status = 'unpaid'
+          AND status <> 'cancelled'
+        """,
+        (payment_method, order_id),
+    )
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+    return redirect(url_for("cashier"))
 
 
 @app.post("/orders")
@@ -363,7 +520,6 @@ def admin_product_toggle(product_id):
 def admin_product_delete(product_id):
     connection = get_db()
     cursor = connection.cursor()
-
     try:
         cursor.execute("DELETE FROM products WHERE id = %s", (product_id,))
         connection.commit()
@@ -409,7 +565,6 @@ def admin_categories():
 def admin_category_delete(category_id):
     connection = get_db()
     cursor = connection.cursor()
-
     try:
         cursor.execute("DELETE FROM categories WHERE id = %s", (category_id,))
         connection.commit()
@@ -508,7 +663,9 @@ def table_qr(table_id):
     if not table:
         return "Table not found", 404
 
-    menu_url = url_for("customer_menu", table_id=table_id, _external=True)
+    base_url = os.getenv("PUBLIC_BASE_URL", request.host_url.rstrip("/")).rstrip("/")
+    menu_url = f"{base_url}/table/{table_id}"
+
     image = qrcode.make(menu_url)
     output = io.BytesIO()
     image.save(output, format="PNG")
@@ -518,6 +675,7 @@ def table_qr(table_id):
         output,
         mimetype="image/png",
         download_name=f"table-{table['table_number']}-qr.png",
+        max_age=0,
     )
 
 

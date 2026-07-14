@@ -1,32 +1,6 @@
-{% extends "base.html" %}
-{% block content %}
-<div class="page-heading">
-    <div>
-        <h2>Admin – Categories</h2>
-        <p>Create categories such as Coffee, Tea, Cake, and Cold Drinks.</p>
-    </div>
-    <a class="button secondary" href="/admin/products">Back to Products</a>
-</div>
-
-{% if error %}
-<div class="alert">{{ error }}</div>
-{% endif %}
-
-<form class="inline-form" method="post">
-    <input name="name" placeholder="New category name" required>
-    <button class="button" type="submit">Add Category</button>
-</form>
-
-<div class="category-list">
-{% for category in categories %}
-    <div class="category-item">
-        <strong>{{ category.name }}</strong>
-        <form method="post"
-              action="/admin/categories/{{ category.id }}/delete"
-              onsubmit="return confirm('Delete this category?');">
-            <button class="small-button danger" type="submit">Delete</button>
-        </form>
-    </div>
-{% endfor %}
-</div>
+{% extends "base.html" %}{% block content %}
+<div class="page-heading"><h2>Admin – Categories</h2><a class="button secondary" href="/admin/products">Back</a></div>
+{% if error %}<div class="alert">{{ error }}</div>{% endif %}
+<form class="inline-form" method="post"><input name="name" placeholder="Category name" required><button class="button">Add Category</button></form>
+<div class="category-list">{% for c in categories %}<div class="category-item"><strong>{{ c.name }}</strong><form method="post" action="/admin/categories/{{ c.id }}/delete"><button class="small-button danger">Delete</button></form></div>{% endfor %}</div>
 {% endblock %}
