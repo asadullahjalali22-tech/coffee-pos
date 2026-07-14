@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="customer-header">
+    <div>
+        <p class="eyebrow">Customer ordering</p>
+        <h2>Table {{ table.table_number }}</h2>
+        <p>Select your products and send the order directly to the kitchen.</p>
+    </div>
+</section>
+
+<div class="pos-layout customer-layout">
+    <section>
+        <div class="product-grid">
+        {% for product in products %}
+            <button
+                class="product-card"
+                data-id="{{ product.id }}"
+                data-name="{{ product.name }}"
+                data-price="{{ product.price }}"
+                onclick="addProduct(this)"
+            >
+                <strong>{{ product.name }}</strong>
+                <span>{{ product.category }}</span>
+                {% if product.description %}
+                <small>{{ product.description }}</small>
+                {% endif %}
+                <span>€{{ "%.2f"|format(product.price) }}</span>
+            </button>
+        {% endfor %}
+        </div>
+    </section>
+
+    <aside class="cart">
+        <h3>Your Order</h3>
+        <div id="cart-items"></div>
+
+        <label for="comment">Special request</label>
+        <textarea id="comment" placeholder="No sugar, extra hot..."></textarea>
+
+        <div class="total-row">
+            <strong>Total</strong>
+            <strong id="total">€0.00</strong>
+        </div>
+
+        <button class="button full" onclick="submitOrder()">Place Order</button>
+        <p id="message"></p>
+    </aside>
+</div>
+
+<script>
+const cart = {};
+const tableId = {{ table.id }};
+
+function addProduct(button) {
+    const id = Number(button.dataset.id);
+    const name = button.dataset.name;
+    const price = Number(button.dataset.price);
+
+    if (!cart[id]) {
+        cart[id] = { product_id: id, name, price, quantity: 0 };
+    }
+
+    cart[id].quantity += 1;
+    renderCart();
+}
+
+function changeQuantity(id, amount) {
+    cart[id].quantity += amount;
+
+    if (cart[id].quantity <= 0) {
+        delete cart[id];
+    }
+
+    renderCart();
+}
+
+function renderCart() {
+    const container = document.getElementById("cart-items");
+    container.innerHTML = "";
+    let total = 0;
+
+    Object.values(cart).forEach(item => {
+        total += item.price * item.quantity;
+
+        const row = document.createElement("div");
+        row.className = "cart-row";
+        row.innerHTML = `
+            <div>
+                <strong>${item.name}</strong>
+                <small>€${item.price.toFixed(2)} each</small>
+            </div>
+            <div class="quantity">
+                <button onclick="changeQuantity(${item.product_id}, -1)">−</button>
+                <span>${item.quantity}</span>
+                <button onclick="changeQuantity(${item.product_id}, 1)">+</button>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+
+    document.getElementById("total").textContent = `€${total.toFixed(2)}`;
+}
+
+async function submitOrder() {
+    const items = Object.values(cart).map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity
+    }));
+
+    const message = document.getElementById("message");
+
+    if (items.length === 0) {
+        message.textContent = "Please select at least one product.";
+        return;
+    }
+
+    const response = await fetch("/orders", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            table_id: tableId,
+            items,
+            comment: document.getElementById("comment").value
+        })
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+        message.textContent = result.error || "Could not create order.";
+        return;
+    }
+
+    message.textContent =
+        `Thank you! Order #${result.order_id} was sent to the kitchen.`;
+
+    Object.keys(cart).forEach(key => delete cart[key]);
+    document.getElementById("comment").value = "";
+    renderCart();
+}
+</script>
+{% endblock %}

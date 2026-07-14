@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="form-page">
+    <div class="page-heading">
+        <h2>{{ page_title }}</h2>
+        <a class="button secondary" href="/admin/products">Back</a>
+    </div>
+
+    {% if error %}
+    <div class="alert">{{ error }}</div>
+    {% endif %}
+
+    <form class="admin-form" method="post">
+        <label>Product name</label>
+        <input name="name" required value="{{ product.name if product else '' }}">
+
+        <label>Category</label>
+        <select name="category_id" required>
+            {% for category in categories %}
+            <option value="{{ category.id }}"
+                {% if product and product.category_id == category.id %}selected{% endif %}>
+                {{ category.name }}
+            </option>
+            {% endfor %}
+        </select>
+
+        <label>Price (€)</label>
+        <input name="price" type="number" min="0" step="0.01" required
+               value="{{ product.price if product else '' }}">
+
+        <label>Description</label>
+        <textarea name="description">{{ product.description if product and product.description else '' }}</textarea>
+
+        <label class="checkbox-row">
+            <input type="checkbox" name="available"
+                   {% if not product or product.available %}checked{% endif %}>
+            Available on cashier screen
+        </label>
+
+        <button class="button full" type="submit">Save Product</button>
+    </form>
+</div>
+{% endblock %}

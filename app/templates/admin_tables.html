@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-heading">
+    <div>
+        <h2>Admin – Tables</h2>
+        <p>Create tables and generate a unique customer QR code for each one.</p>
+    </div>
+    <a class="button secondary" href="/admin/products">Products</a>
+</div>
+
+{% if error %}
+<div class="alert">{{ error }}</div>
+{% endif %}
+
+<form class="inline-form" method="post">
+    <input name="table_number" placeholder="Table number, for example 5" required>
+    <button class="button" type="submit">+ Add Table</button>
+</form>
+
+<div class="table-card-grid">
+{% for table in tables %}
+    <article class="table-management-card">
+        <div class="table-card-heading">
+            <div>
+                <h3>Table {{ table.table_number }}</h3>
+                <span class="badge {{ 'badge-success' if table.active else 'badge-disabled' }}">
+                    {{ "Active" if table.active else "Disabled" }}
+                </span>
+            </div>
+            <img
+                class="qr-preview"
+                src="/admin/tables/{{ table.id }}/qr"
+                alt="QR code for table {{ table.table_number }}"
+            >
+        </div>
+
+        <p class="table-url">
+            Customer page:
+            <a href="/table/{{ table.id }}" target="_blank">
+                /table/{{ table.id }}
+            </a>
+        </p>
+
+        <div class="row-actions">
+            <a
+                class="small-button"
+                href="/admin/tables/{{ table.id }}/qr"
+                target="_blank"
+            >Open QR</a>
+
+            <form method="post" action="/admin/tables/{{ table.id }}/toggle">
+                <button class="small-button secondary" type="submit">
+                    {{ "Disable" if table.active else "Enable" }}
+                </button>
+            </form>
+
+            <form
+                method="post"
+                action="/admin/tables/{{ table.id }}/delete"
+                onsubmit="return confirm('Delete this table?');"
+            >
+                <button class="small-button danger" type="submit">Delete</button>
+            </form>
+        </div>
+    </article>
+{% else %}
+    <p>No tables found.</p>
+{% endfor %}
+</div>
+{% endblock %}

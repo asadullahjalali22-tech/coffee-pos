@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Cashier Dashboard</h2>
+
+<div class="pos-layout">
+    <section>
+        <div class="product-grid">
+            {% for product in products %}
+            <button
+                class="product-card"
+                data-id="{{ product.id }}"
+                data-name="{{ product.name }}"
+                data-price="{{ product.price }}"
+                onclick="addProduct(this)"
+            >
+                <strong>{{ product.name }}</strong>
+                <span>{{ product.category }}</span>
+                <span>€{{ "%.2f"|format(product.price) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </section>
+
+    <aside class="cart">
+        <h3>Current Order</h3>
+        <div id="cart-items"></div>
+
+        <label for="comment">Comment</label>
+        <textarea id="comment" placeholder="No sugar, extra hot..."></textarea>
+
+        <div class="total-row">
+            <strong>Total</strong>
+            <strong id="total">€0.00</strong>
+        </div>
+
+        <button class="button full" onclick="submitOrder()">Place Order</button>
+        <p id="message"></p>
+    </aside>
+</div>
+
+<script>
+const cart = {};
+
+function addProduct(button) {
+    const id = Number(button.dataset.id);
+    const name = button.dataset.name;
+    const price = Number(button.dataset.price);
+
+    if (!cart[id]) {
+        cart[id] = { product_id: id, name, price, quantity: 0 };
+    }
+
+    cart[id].quantity += 1;
+    renderCart();
+}
+
+function changeQuantity(id, amount) {
+    cart[id].quantity += amount;
+
+    if (cart[id].quantity <= 0) {
+        delete cart[id];
+    }
+
+    renderCart();
+}
+
+function renderCart() {
+    const container = document.getElementById("cart-items");
+    container.innerHTML = "";
+    let total = 0;
+
+    Object.values(cart).forEach(item => {
+        total += item.price * item.quantity;
+
+        const row = document.createElement("div");
+        row.className = "cart-row";
+        row.innerHTML = `
+            <div>
+                <strong>${item.name}</strong>
+                <small>€${item.price.toFixed(2)} each</small>
+            </div>
+            <div class="quantity">
+                <button onclick="changeQuantity(${item.product_id}, -1)">−</button>
+                <span>${item.quantity}</span>
+                <button onclick="changeQuantity(${item.product_id}, 1)">+</button>
+            </div>
+        `;
+        container.appendChild(row);
+    });
+
+    document.getElementById("total").textContent = `€${total.toFixed(2)}`;
+}
+
+async function submitOrder() {
+    const items = Object.values(cart).map(item => ({
+        product_id: item.product_id,
+        quantity: item.quantity
+    }));
+
+    const response = await fetch("/orders", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            items,
+            comment: document.getElementById("comment").value
+        })
+    });
+
+    const result = await response.json();
+    const message = document.getElementById("message");
+
+    if (!response.ok) {
+        message.textContent = result.error || "Could not create order.";
+        return;
+    }
+
+    message.textContent = `Order #${result.order_id} created. Total €${result.total.toFixed(2)}`;
+    Object.keys(cart).forEach(key => delete cart[key]);
+    document.getElementById("comment").value = "";
+    renderCart();
+}
+</script>
+{% endblock %}
