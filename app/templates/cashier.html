@@ -1,123 +1,360 @@
 {% extends "base.html" %}
 {% block content %}
-<h2>Cashier Dashboard</h2>
 
-<div class="pos-layout">
-    <section>
-        <div class="product-grid">
-            {% for product in products %}
-            <button
-                class="product-card"
-                data-id="{{ product.id }}"
-                data-name="{{ product.name }}"
-                data-price="{{ product.price }}"
-                onclick="addProduct(this)"
-            >
-                <strong>{{ product.name }}</strong>
-                <span>{{ product.category }}</span>
-                <span>€{{ "%.2f"|format(product.price) }}</span>
-            </button>
-            {% endfor %}
+<section class="billing-header">
+    <div>
+        <p class="billing-kicker">FINAL PAYMENT</p>
+        <h2>Cashier & Table Billing</h2>
+        <p>All unpaid orders from the same table are combined into one bill.</p>
+    </div>
+
+    <div class="billing-summary">
+        <div>
+            <span>Open tables</span>
+            <strong>{{ table_groups|length }}</strong>
         </div>
-    </section>
-
-    <aside class="cart">
-        <h3>Current Order</h3>
-        <div id="cart-items"></div>
-
-        <label for="comment">Comment</label>
-        <textarea id="comment" placeholder="No sugar, extra hot..."></textarea>
-
-        <div class="total-row">
-            <strong>Total</strong>
-            <strong id="total">€0.00</strong>
+        <div>
+            <span>Table balance</span>
+            <strong>€{{ "%.2f"|format(open_table_total) }}</strong>
         </div>
+        <div>
+            <span>Counter balance</span>
+            <strong>€{{ "%.2f"|format(counter_total) }}</strong>
+        </div>
+    </div>
+</section>
 
-        <button class="button full" onclick="submitOrder()">Place Order</button>
-        <p id="message"></p>
-    </aside>
-</div>
+<section class="billing-section"><div class="billing-section-title"><div><h3>Service Requests</h3><p>Customer calls and bill requests.</p></div></div><div class="request-grid">{% for r in service_requests %}<article class="request-card request-{{ r.request_type }}"><strong>Table {{ r.table_number }}</strong><span>{{ 'Request bill' if r.request_type=='bill' else 'Call waiter' }}</span><small>{{ r.created_at.strftime('%H:%M') }}</small><form method="post" action="/service-requests/{{ r.id }}/complete"><button class="small-button">Complete</button></form></article>{% else %}<div class="billing-empty compact"><p>No open requests.</p></div>{% endfor %}</div></section><section class="billing-section">
+    <div class="billing-section-title">
+        <div>
+            <h3>Open Tables</h3>
+            <p>Multiple orders from one table remain together until payment.</p>
+        </div>
+    </div>
+
+    <div class="table-bill-grid">
+        {% for group in table_groups %}
+        <article class="table-bill-card">
+            <div class="table-bill-top">
+                <div>
+                    <span class="table-label">TABLE</span>
+                    <h3>{{ group.table_number }}</h3>
+                </div>
+                <div class="table-balance">
+                    <span>Balance</span>
+                    <strong>€{{ "%.2f"|format(group.total) }}</strong>
+                </div>
+            </div>
+
+            <div class="grouped-orders">
+                {% for order in group.orders %}
+                <section class="bill-order">
+                    <div class="bill-order-heading">
+                        <div>
+                            <strong>Order #{{ order.id }}</strong>
+                            <small>{{ order.created_at.strftime("%d.%m.%Y %H:%M") }}</small>
+                        </div>
+                        <span class="status-chip status-{{ order.status }}">
+                            {{ order.status }}
+                        </span>
+                    </div>
+
+                    <div class="bill-items">
+                        {% for item in order["items"] %}
+                        <div>
+                            <span>{{ item.quantity }} × {{ item.name }}</span>
+                            <strong>€{{ "%.2f"|format(item.line_total) }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    {% if order.customer_comment %}
+                    <p class="bill-comment">
+                        <strong>Comment:</strong> {{ order.customer_comment }}
+                    </p>
+                    {% endif %}
+
+                    <div class="bill-order-total">
+                        <span>Order total</span>
+                        <strong>€{{ "%.2f"|format(order.total) }}</strong>
+                    </div>
+                </section>
+                {% endfor %}
+            </div>
+
+            <div class="payment-box"
+                 data-subtotal="{{ '%.2f'|format(group.total) }}">
+                <div class="payment-title">
+                    <div>
+                        <strong>Complete Table {{ group.table_number }} payment</strong>
+                        <small>All unpaid orders above will be closed together.</small>
+                    </div>
+                </div>
+
+                <form class="checkout-form"
+                      method="post"
+                      action="/cashier/tables/{{ group.table_id }}/pay">
+                    <div class="checkout-details">
+                        <label class="discount-field">
+                            <span>Discount</span>
+                            <div>
+                                <input
+                                    type="number"
+                                    name="discount_percent"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    value="0"
+                                    class="discount-percent"
+                                >
+                                <b>%</b>
+                            </div>
+                        </label>
+
+                        <div class="checkout-totals">
+                            <div>
+                                <span>Subtotal</span>
+                                <strong>€{{ "%.2f"|format(group.total) }}</strong>
+                            </div>
+                            <div>
+                                <span>Discount</span>
+                                <strong class="discount-value">− €0.00</strong>
+                            </div>
+                            <div>
+                                <span>VAT included (19%)</span>
+                                <strong class="vat-value">
+                                    €{{ "%.2f"|format((group.total|float) - ((group.total|float) / 1.19)) }}
+                                </strong>
+                            </div>
+                            <div class="grand-total-row">
+                                <span>Amount to pay</span>
+                                <strong class="grand-total">
+                                    €{{ "%.2f"|format(group.total) }}
+                                </strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="payment-actions">
+                        <button
+                            class="payment-button cash-button"
+                            type="submit"
+                            name="payment_method"
+                            value="cash"
+                            onclick="return confirmPayment(this, 'cash', 'Table {{ group.table_number }}')"
+                        >
+                            <span>Cash</span>
+                            <strong class="button-total">
+                                €{{ "%.2f"|format(group.total) }}
+                            </strong>
+                        </button>
+
+                        <button
+                            class="payment-button card-button"
+                            type="submit"
+                            name="payment_method"
+                            value="card"
+                            onclick="return confirmPayment(this, 'card', 'Table {{ group.table_number }}')"
+                        >
+                            <span>Card</span>
+                            <strong class="button-total">
+                                €{{ "%.2f"|format(group.total) }}
+                            </strong>
+                        </button>
+                    </div>
+
+                    <p class="receipt-note">
+                        A printable receipt opens automatically after payment.
+                    </p>
+                </form>
+            </div>
+        </article>
+        {% else %}
+        <div class="billing-empty">
+            <div>✓</div>
+            <h3>No unpaid table bills</h3>
+            <p>New table orders will appear here automatically.</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="billing-section">
+    <div class="billing-section-title">
+        <div>
+            <h3>Counter Orders</h3>
+            <p>Orders without a table are paid individually.</p>
+        </div>
+    </div>
+
+    <div class="counter-order-grid">
+        {% for order in counter_orders %}
+        <article class="counter-order-card">
+            <div class="bill-order-heading">
+                <div>
+                    <strong>Counter Order #{{ order.id }}</strong>
+                    <small>{{ order.created_at.strftime("%d.%m.%Y %H:%M") }}</small>
+                </div>
+                <span class="status-chip status-{{ order.status }}">{{ order.status }}</span>
+            </div>
+
+            <div class="bill-items">
+                {% for item in order["items"] %}
+                <div>
+                    <span>{{ item.quantity }} × {{ item.name }}</span>
+                    <strong>€{{ "%.2f"|format(item.line_total) }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="bill-order-total counter-total">
+                <span>Total</span>
+                <strong>€{{ "%.2f"|format(order.total) }}</strong>
+            </div>
+
+            <div class="counter-checkout"
+                 data-subtotal="{{ '%.2f'|format(order.total) }}">
+                <form class="checkout-form"
+                      method="post"
+                      action="/cashier/orders/{{ order.id }}/pay">
+                    <label class="discount-field compact-discount">
+                        <span>Discount</span>
+                        <div>
+                            <input
+                                class="discount-percent"
+                                type="number"
+                                name="discount_percent"
+                                min="0"
+                                max="100"
+                                step="1"
+                                value="0"
+                            >
+                            <b>%</b>
+                        </div>
+                    </label>
+
+                    <div class="counter-payment-summary">
+                        <span>Amount to pay</span>
+                        <strong class="grand-total">
+                            €{{ "%.2f"|format(order.total) }}
+                        </strong>
+                    </div>
+
+                    <div class="payment-actions">
+                        <button
+                            class="payment-button cash-button"
+                            type="submit"
+                            name="payment_method"
+                            value="cash"
+                            onclick="return confirmPayment(this, 'cash', 'Counter Order #{{ order.id }}')"
+                        >Cash</button>
+
+                        <button
+                            class="payment-button card-button"
+                            type="submit"
+                            name="payment_method"
+                            value="card"
+                            onclick="return confirmPayment(this, 'card', 'Counter Order #{{ order.id }}')"
+                        >Card</button>
+                    </div>
+                </form>
+            </div>
+        </article>
+        {% else %}
+        <div class="billing-empty compact">
+            <p>No unpaid counter orders.</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="billing-section">
+    <div class="billing-section-title">
+        <div>
+            <h3>Recent Payments</h3>
+            <p>The latest 30 paid orders.</p>
+        </div>
+    </div>
+
+    <div class="table-wrapper payment-history">
+        <table>
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>Source</th>
+                    <th>Method</th>
+                    <th>Total</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in paid_history %}
+                <tr>
+                    <td>#{{ order.id }}</td>
+                    <td>
+                        {% if order.table_id %}
+                            Table {{ order.table_number }}
+                        {% else %}
+                            Counter
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="method-badge method-{{ order.payment_method }}">
+                            {{ order.payment_method or "unknown" }}
+                        </span>
+                    </td>
+                    <td><strong>€{{ "%.2f"|format(order.total) }}</strong></td>
+                    <td>{{ order.created_at.strftime("%d.%m.%Y %H:%M") }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5">No paid orders yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
 
 <script>
-const cart = {};
+function updateCheckout(container) {
+    const subtotal = Number(container.dataset.subtotal || 0);
+    const input = container.querySelector(".discount-percent");
+    const percent = Math.min(100, Math.max(0, Number(input?.value || 0)));
+    const discount = subtotal * percent / 100;
+    const grandTotal = subtotal - discount;
+    const vat = grandTotal - (grandTotal / 1.19);
 
-function addProduct(button) {
-    const id = Number(button.dataset.id);
-    const name = button.dataset.name;
-    const price = Number(button.dataset.price);
+    const discountValue = container.querySelector(".discount-value");
+    const vatValue = container.querySelector(".vat-value");
 
-    if (!cart[id]) {
-        cart[id] = { product_id: id, name, price, quantity: 0 };
+    if (discountValue) {
+        discountValue.textContent = `− €${discount.toFixed(2)}`;
+    }
+    if (vatValue) {
+        vatValue.textContent = `€${vat.toFixed(2)}`;
     }
 
-    cart[id].quantity += 1;
-    renderCart();
-}
-
-function changeQuantity(id, amount) {
-    cart[id].quantity += amount;
-
-    if (cart[id].quantity <= 0) {
-        delete cart[id];
-    }
-
-    renderCart();
-}
-
-function renderCart() {
-    const container = document.getElementById("cart-items");
-    container.innerHTML = "";
-    let total = 0;
-
-    Object.values(cart).forEach(item => {
-        total += item.price * item.quantity;
-
-        const row = document.createElement("div");
-        row.className = "cart-row";
-        row.innerHTML = `
-            <div>
-                <strong>${item.name}</strong>
-                <small>€${item.price.toFixed(2)} each</small>
-            </div>
-            <div class="quantity">
-                <button onclick="changeQuantity(${item.product_id}, -1)">−</button>
-                <span>${item.quantity}</span>
-                <button onclick="changeQuantity(${item.product_id}, 1)">+</button>
-            </div>
-        `;
-        container.appendChild(row);
+    container.querySelectorAll(".grand-total, .button-total").forEach(element => {
+        element.textContent = `€${grandTotal.toFixed(2)}`;
     });
-
-    document.getElementById("total").textContent = `€${total.toFixed(2)}`;
 }
 
-async function submitOrder() {
-    const items = Object.values(cart).map(item => ({
-        product_id: item.product_id,
-        quantity: item.quantity
-    }));
+function confirmPayment(button, method, source) {
+    const container = button.closest("[data-subtotal]");
+    updateCheckout(container);
+    const total = container.querySelector(".grand-total")?.textContent || "";
+    return confirm(`Confirm ${method.toUpperCase()} payment of ${total} for ${source}?`);
+}
 
-    const response = await fetch("/orders", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({
-            items,
-            comment: document.getElementById("comment").value
-        })
-    });
-
-    const result = await response.json();
-    const message = document.getElementById("message");
-
-    if (!response.ok) {
-        message.textContent = result.error || "Could not create order.";
-        return;
+document.querySelectorAll("[data-subtotal]").forEach(container => {
+    const input = container.querySelector(".discount-percent");
+    if (input) {
+        input.addEventListener("input", () => updateCheckout(container));
     }
-
-    message.textContent = `Order #${result.order_id} created. Total €${result.total.toFixed(2)}`;
-    Object.keys(cart).forEach(key => delete cart[key]);
-    document.getElementById("comment").value = "";
-    renderCart();
-}
+    updateCheckout(container);
+});
 </script>
+
 {% endblock %}

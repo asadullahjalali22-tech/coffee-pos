@@ -63,3 +63,9 @@ INSERT IGNORE INTO cafe_tables (id, table_number, active) VALUES
 (2, '2', TRUE),
 (3, '3', TRUE),
 (4, '4', TRUE);
+
+
+CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY,username VARCHAR(80) NOT NULL UNIQUE,password_hash VARCHAR(255) NOT NULL,role ENUM('admin','cashier','kitchen') NOT NULL,active BOOLEAN NOT NULL DEFAULT TRUE,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS service_requests (id INT AUTO_INCREMENT PRIMARY KEY,table_id INT NOT NULL,request_type ENUM('waiter','bill') NOT NULL,status ENUM('open','completed') NOT NULL DEFAULT 'open',created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,completed_at TIMESTAMP NULL,FOREIGN KEY(table_id) REFERENCES cafe_tables(id));
+CREATE TABLE IF NOT EXISTS payments (id VARCHAR(36) PRIMARY KEY,table_id INT NULL,method ENUM('cash','card') NOT NULL,subtotal DECIMAL(10,2) NOT NULL,discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,vat_rate DECIMAL(5,2) NOT NULL DEFAULT 19.00,total DECIMAL(10,2) NOT NULL,created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,FOREIGN KEY(table_id) REFERENCES cafe_tables(id));
+CREATE TABLE IF NOT EXISTS payment_orders (payment_id VARCHAR(36) NOT NULL,order_id INT NOT NULL,PRIMARY KEY(payment_id,order_id),FOREIGN KEY(payment_id) REFERENCES payments(id) ON DELETE CASCADE,FOREIGN KEY(order_id) REFERENCES orders(id));
